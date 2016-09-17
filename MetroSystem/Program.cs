@@ -747,8 +747,8 @@ namespace MetroSystem
             Program metrosys = new Program();
             metrosys.ReadData();
             metrosys.BuildGragph();
-            //Station f = metrosys.StaCollection[args[1]];
-            //Station t = metrosys.StaCollection[args[2]];
+            /*Station f = metrosys.StaCollection[args[1]];
+            Station t = metrosys.StaCollection[args[2]];
             string f1="大屯路东5";
             string f2 = "回龙观东大街";
             string f3 = "亦庄火车站";
@@ -778,7 +778,7 @@ namespace MetroSystem
             //System.Console.Write(q.Item2);
             //System.Console.Write(q.Item1);
             Console.ReadLine();
-            /*
+            */
             if (args.Length == 1 && args[0].Equals("exit"))
             {
                 System.Console.WriteLine("程序结束");
@@ -790,23 +790,28 @@ namespace MetroSystem
             }
             else
             {
+                string f = args[1];
+                string t = args[2];
                 switch (args[0])
                 {
                     case "-c":
-                        //subwaySystem.GetLeastTransPathAndPrint();
+                        Tuple<string, int> p1 = metrosys.BFSPath(f, t);
+                        System.Console.Write(p1.Item2);
+                        System.Console.WriteLine(p1.Item1);
                         break;
                     case "-b":
-                        Tuple<string,int> p = metrosys.DjistraPath(f, t);
-                        System.Console.WriteLine(p.Item2);
-                        System.Console.WriteLine(p.Item1);
+                        Tuple<string,int> p2 = metrosys.DjistraPath(f, t);
+                        System.Console.Write(p2.Item2);
+                        System.Console.WriteLine(p2.Item1);
                         break;
                     case "-a":
+                        System.Console.WriteLine("暂不支持-c功能");
                         break;
                     default:
                         System.Console.WriteLine("错误的参数，请重试");
                         break;
                 }
-            }*/
+            }
         }
     }
 }
