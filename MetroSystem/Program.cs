@@ -131,13 +131,14 @@ namespace MetroSystem
     }
     class Program
     {
-        Dictionary<string, Station> StaCollection=new Dictionary<string, Station>();
+        public Dictionary<string, Station> StaCollection=new Dictionary<string, Station>();
         Dictionary<string, Line> LineCollection=new Dictionary<string, Line>();
         Dictionary<string, int> NameToNo = new Dictionary<string, int>();
-        Dictionary<int, string> NoToName = new Dictionary<int, string>();
+        public Dictionary<int, string> NoToName = new Dictionary<int, string>();
         Dictionary<string, Station> TransStaCollection = new Dictionary<string, Station>();
         static int MAXN=60;
         private static int[,] graph = new int[MAXN,MAXN];//The Adjacency matrix of the graph  
+        private static int[,] graph1 = new int[MAXN, MAXN];//The Adjacency matrix of the graph  
 
         private int _minLine;
         private int _minTransCount;
@@ -197,9 +198,15 @@ namespace MetroSystem
                 for(int j=0;j<MAXN;j++)
                 {
                     if (i == j)
-                        graph[i,j] = 0;
+                    {
+                        graph[i, j] = 0;
+                        graph1[i, j] = 0;
+                    }
                     else
-                        graph[i,j] = BigNum;
+                    {
+                        graph[i, j] = BigNum;
+                        graph1[i, j] = BigNum;
+                    }
                 }
             }
             for (int i = 1; i <= TransStaCount; i++)
@@ -209,6 +216,13 @@ namespace MetroSystem
                 {
                     if(graph[i,NameToNo[s.StationName]]==0|| graph[i,NameToNo[s.StationName]]==BigNum) //优化时间
                         graph[i,NameToNo[s.StationName]] = SectionLen(TransStaCollection[NoToName[i]], s);
+                }
+                temp.Clear();
+                temp = GetShortestLinkedStations(TransStaCollection[NoToName[i]]);
+                foreach (Station s in temp)
+                {
+                    if (graph1[i, NameToNo[s.StationName]] == 0 || graph1[i, NameToNo[s.StationName]] == BigNum) //优化时间
+                        graph1[i, NameToNo[s.StationName]] = SectionLen(TransStaCollection[NoToName[i]], s);
                 }
             }
         }
@@ -742,15 +756,79 @@ namespace MetroSystem
             }
             return linksta;
         }
+        public List<Station> GetShortestLinkedStations(Station s)
+        {
+            List<Station> linksta = new List<Station>();
+            foreach (Line l in s.PlaceOfLine.Keys)
+            {
+                Station now = s;
+                bool flag = false;
+                int place = l.Stations.IndexOf(s);
+                for(int i=place;i>=0;i--)
+                {
+                    now = l.Stations.ElementAt(i);
+                    if (now.isTrans && (!(linksta.Contains(now) || now.StationName.Equals(s.StationName))))
+                    {
+                        linksta.Add(now);
+                        flag = true;
+                        break;
+                    }
+                }
+                if(flag==false&&l.isRoundLine)
+                {
+                    for (int i = l.Stations.Count-1; i > place; i--)
+                    {
+                        now = l.Stations.ElementAt(i);
+                        if (now.isTrans && (!(linksta.Contains(now) || now.StationName.Equals(s.StationName))))
+                        {
+                            linksta.Add(now);
+                            break;
+                        }
+                    }
+                }
+                flag = false;
+                for (int i = place; i <l.Stations.Count; i++)
+                {
+                    now = l.Stations.ElementAt(i);
+                    if (now.isTrans && (!(linksta.Contains(now) || now.StationName.Equals(s.StationName))))
+                    {
+                        linksta.Add(now);
+                        flag = true;
+                        break;
+                    }
+                }
+                if (flag ==false && l.isRoundLine)
+                {
+                    for (int i = 0; i < place; i++)
+                    {
+                        now = l.Stations.ElementAt(i);
+                        if (now.isTrans && (!(linksta.Contains(now) || now.StationName.Equals(s.StationName))))
+                        {
+                            linksta.Add(now);
+                            break;
+                        }
+                    }
+                }
+            }
+            return linksta;
+            
+        }
         static void Main(string[] args)
         {
             Program metrosys = new Program();
             metrosys.ReadData();
             metrosys.BuildGragph();
-            /*Station f = metrosys.StaCollection[args[1]];
+
+            /*ChinPost cp = new ChinPost(metrosys);
+            cp.Initial(graph1, TransStaCount, 1);
+            cp.OddDeal();
+            cp.Fleury(1);
+            Console.ReadLine();
+            Station f = metrosys.StaCollection[args[1]];
             Station t = metrosys.StaCollection[args[2]];
-            string f1="大屯路东5";
-            string f2 = "回龙观东大街";
+            
+            string f1="南邵";
+            string f2 = "角门西";
             string f3 = "亦庄火车站";
             string f4 = "木樨地";
             string f5 = "灯市口";
@@ -783,6 +861,22 @@ namespace MetroSystem
             {
                 System.Console.WriteLine("程序结束");
                 return;
+            }
+            else if(args.Length == 2 && args[0].Equals("-p"))
+            {
+                if(metrosys.LineCollection.ContainsKey(args[1]))
+                {
+                    System.Console.WriteLine(metrosys.LineCollection[args[1]].LineName);
+                    foreach (Station s in metrosys.LineCollection[args[1]].Stations)
+                    {
+                        System.Console.WriteLine(s.StationName);
+                    }
+                }
+                else
+                {
+                    System.Console.WriteLine("不存在这条线路，请重试");
+                }
+                
             }
             else if (args.Length != 3)
             {
