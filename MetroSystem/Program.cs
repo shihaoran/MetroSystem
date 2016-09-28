@@ -15,20 +15,32 @@ namespace MetroSystem
         public bool isTrans;
         public int TransLineCount;
         public List<string> TransLine = new List<string>();
-        public bool isBoundary;
+        public bool isBoundary=false;
+        public List<string> EndStas = new List<string>();
         private int TransStaNo;
 
         public Station(string[] infos,Line l)
         {
             StationName = infos[0];
+            int pointer = 1;
             if(infos.Length>1)
             {
-                for (int i = 1; i < infos.Length; i++)
+                if (infos[1].Equals("IsBound"))
+                {
+                    isBoundary = true;
+                    if (!EndStas.Contains(infos[2]))
+                        EndStas.Add(infos[2]);
+                    pointer = 3;
+                }
+            }
+            if(infos.Length>pointer)
+            {
+                for (int i = pointer; i < infos.Length; i++)
                 {
                     TransLine.Add(infos[i]);
                 }
                 TransLine.Add(l.LineName);
-                TransLineCount = infos.Length;
+                TransLineCount = infos.Length-pointer+1;
                 isTrans = true;
             }
             PlaceOfLine.Add(l, l.getStaCount()+1);
@@ -51,6 +63,15 @@ namespace MetroSystem
         public override string ToString()
         {
             return StationName.ToString();
+        }
+        public void addEndSta(string[] infos)
+        {
+            if (infos[1].Equals("IsBound"))
+            {
+                isBoundary = true;
+                if (!EndStas.Contains(infos[2]))
+                    EndStas.Add(infos[2]);
+            }
         }
     }
 
@@ -172,7 +193,14 @@ namespace MetroSystem
                         if (!StaCollection.ContainsKey(infos[0]))
                             StaCollection.Add(infos[0], new Station(infos,MetroLine));
                         else
+                        {
                             StaCollection[infos[0]].addLine(MetroLine);
+                            if(infos.Length>1)
+                            {
+                                if (infos[1].Equals("IsBound"))
+                                    StaCollection[infos[0]].addEndSta(infos);
+                            } 
+                        }
                         if(StaCollection[infos[0]].isTrans&&(!TransStaCollection.ContainsKey(infos[0])))
                         {
                             TransStaCollection.Add(infos[0], StaCollection[infos[0]]);
@@ -190,9 +218,10 @@ namespace MetroSystem
                     readIn = sr.ReadLine();
             }
         }
-        public void BuildGragph()
+        public void BuildGragph(string old1,string old2,string new1)
         {
             int BigNum = 99999;
+            int pointer = 0;
             for (int i=0;i<MAXN; i++)
             {
                 for(int j=0;j<MAXN;j++)
@@ -209,7 +238,9 @@ namespace MetroSystem
                     }
                 }
             }
-            for (int i = 1; i <= TransStaCount; i++)
+            if (!new1.Equals(""))
+                pointer = 1;
+            for (int i = 1; i <= TransStaCount-pointer; i++)
             {
                 List<Station> temp = GetLinkedStations(TransStaCollection[NoToName[i]]);
                 foreach(Station s in temp)
@@ -224,6 +255,15 @@ namespace MetroSystem
                     if (graph1[i, NameToNo[s.StationName]] == 0 || graph1[i, NameToNo[s.StationName]] == BigNum) //优化时间
                         graph1[i, NameToNo[s.StationName]] = SectionLen(TransStaCollection[NoToName[i]], s);
                 }
+            }
+            if (!new1.Equals(""))
+            {
+                graph1[NameToNo[old1], NameToNo[old2]] = BigNum;
+                graph1[NameToNo[old2], NameToNo[old1]] = BigNum;
+                graph1[NameToNo[old1], NameToNo[new1]] = SectionLen(StaCollection[old1], StaCollection[new1]);
+                graph1[NameToNo[old2], NameToNo[new1]] = SectionLen(StaCollection[old2], StaCollection[new1]);
+                graph1[NameToNo[new1], NameToNo[old1]] = SectionLen(StaCollection[old1], StaCollection[new1]);
+                graph1[NameToNo[new1], NameToNo[old2]] = SectionLen(StaCollection[old2], StaCollection[new1]);
             }
         }
         public Tuple<string,int> DjistraPath(string f,string t)
@@ -817,7 +857,7 @@ namespace MetroSystem
         {
             Program metrosys = new Program();
             metrosys.ReadData();
-            metrosys.BuildGragph();
+            metrosys.BuildGragph("","","");
 
             /*ChinPost cp = new ChinPost(metrosys);
             cp.Initial(graph1, TransStaCount, 1);
@@ -878,14 +918,20 @@ namespace MetroSystem
                 }
                 
             }
-            else if (args.Length != 3)
+            else if (args.Length != 2 && args[0].Equals("-a"))
+            {
+                System.Console.WriteLine("使用-a功能请只设置一个起点站，请重试");
+            }
+            else if (args.Length != 3&&!args[0].Equals("-a"))
             {
                 System.Console.WriteLine("不正确的格式，请重试");
             }
             else
             {
                 string f = args[1];
-                string t = args[2];
+                string t = "";
+                if (args.Length>2)
+                    t = args[2];
                 switch (args[0])
                 {
                     case "-c":
@@ -899,13 +945,98 @@ namespace MetroSystem
                         System.Console.WriteLine(p2.Item1);
                         break;
                     case "-a":
-                        System.Console.WriteLine("暂不支持-c功能");
+                        int startstano = -1;
+                        int addcount = 0;
+                        string string_in = "";
+                        string string_out = "";
+                        if (!metrosys.StaCollection.ContainsKey(f))
+                        {
+                            System.Console.WriteLine("起点车站不存在，请重试");
+                            break;
+                        }
+                        if(metrosys.StaCollection[f].isTrans)
+                        {
+                            startstano = metrosys.NameToNo[f];
+                        }
+                        else
+                        {
+                            Station s = metrosys.StaCollection[f];
+                            Line l = s.PlaceOfLine.First().Key;
+                            int start_place= s.PlaceOfLine.First().Value;
+                            bool flag_low = false;
+                            bool flag_high = false;
+                            int low_place = -1;
+                            int high_place = -1;
+                            if(start_place!=0)
+                            {
+                                for (int i = start_place - 1; i >= 0; i--)
+                                {
+                                    if (l.Stations.ElementAt(i).isTrans)
+                                    {
+                                        flag_low = true;
+                                        low_place = i;
+                                        break;
+                                    }
+                                }
+                            }
+                            if(start_place!=l.Stations.Count-1)
+                            {
+                                for (int i = start_place + 1; i <= l.Stations.Count-1; i++)
+                                {
+                                    if (l.Stations.ElementAt(i).isTrans)
+                                    {
+                                        flag_high = true;
+                                        high_place = i;
+                                        break;
+                                    }
+                                }
+                            }
+                            if(flag_high==true&&flag_low==true)
+                            {
+                                metrosys.TransStaCollection.Add(f,s);
+                                TransStaCount++;
+                                metrosys.NameToNo.Add(f, TransStaCount);
+                                metrosys.NoToName.Add(TransStaCount, f);
+                                metrosys.StaCollection[f].setTransStaNo(TransStaCount);
+                                string new1 = f;
+                                string old1 = l.Stations.ElementAt(high_place).StationName;
+                                string old2= l.Stations.ElementAt(low_place).StationName;
+                                metrosys.BuildGragph(old1,old2,new1);
+                                startstano = TransStaCount;
+                            }
+                            else if(flag_high==true)
+                            {
+                                string_in = string_in + f + "-" + l.Stations.First().StationName + "\n" + l.Stations.First().StationName + "-" + l.Stations.ElementAt(high_place).StationName + "\n";
+                                string_out = string_out + l.Stations.ElementAt(high_place).StationName + "-" + f+"\n";
+                                addcount +=metrosys.SectionLen(l.Stations.ElementAt(high_place), l.Stations.First()) *2;
+                                startstano = metrosys.NameToNo[l.Stations.ElementAt(high_place).StationName];
+                                l.Stations.ElementAt(high_place).EndStas.Remove(l.Stations.First().StationName);
+                            }
+                            else if(flag_low==true)
+                            {
+                                string_in = string_in + f + "-" + l.Stations.Last().StationName + "\n" + l.Stations.Last().StationName + "-" + l.Stations.ElementAt(low_place).StationName + "\n";
+                                string_out = string_out + l.Stations.ElementAt(low_place).StationName + "-" + f+"\n";
+                                addcount += metrosys.SectionLen(l.Stations.ElementAt(low_place), l.Stations.Last()) * 2;
+                                startstano = metrosys.NameToNo[l.Stations.ElementAt(low_place).StationName];
+                                l.Stations.ElementAt(low_place).EndStas.Remove(l.Stations.Last().StationName);
+                            }
+                            else
+                            {
+                                System.Console.WriteLine("这是一个奇怪的站");
+                                break;
+                            }
+                        }
+                        ChinPost cp = new ChinPost(metrosys);
+                        cp.Initial(graph1, TransStaCount,startstano);
+                        cp.OddDeal();
+                        cp.Fleury(startstano,string_in,string_out,addcount);
                         break;
                     default:
                         System.Console.WriteLine("错误的参数，请重试");
                         break;
                 }
             }
+            
         }
     }
 }

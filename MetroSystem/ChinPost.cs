@@ -380,7 +380,17 @@ namespace MetroSystem
                 AddShortPaths(); // 根据odd数组添加最短路径
             }
         }
-
+        public int PrintBound(int stano)
+        {
+            int add = 0;
+            foreach (string end in metrosys.StaCollection[NoToName[stano]].EndStas)
+            {
+                Console.WriteLine(NoToName[stano] + "-" + end);
+                Console.WriteLine(end + "-" + NoToName[stano]);
+                add += metrosys.SectionLen(metrosys.StaCollection[end], metrosys.StaCollection[NoToName[stano]]) * 2;
+            }
+            return add;
+        }
         /*
         用Fleury算法求最短欧拉回游
         假设迹wi=v0e1v1…eivi已经选定，那么按下述方法从E-｛e1,e2,…,ei｝中选取边ei+1:
@@ -388,14 +398,23 @@ namespace MetroSystem
         2)、除非没有别的边可选择，否则 ei+1不能是Gi=G-｛e1,e2,…,ei｝的割边。
         3)、 当(2)不能执行时，算法停止。
         */
-        public void Fleury(int start)
+        public void Fleury(int start,string string_in,string string_out,int addcount)
         {
             int i;
             int vi = start; // v0e1v1…eivi已经选定
             bool bNoPoints=false, bCnecTest;
-            System.Console.WriteLine("最短路线");
+            Console.WriteLine("最短路线");
+            Console.Write(string_in);
             bool flag = false;
             int sum = 0;
+            bool[] boundprinted = new bool[MAX_NODE];
+            for (i = 0; i < MAX_NODE; i++)
+                boundprinted[i] = false;
+            if (metrosys.StaCollection[NoToName[vi]].isBoundary && boundprinted[vi] == false)
+            {
+                sum += PrintBound(vi);
+                boundprinted[vi] = true;
+            }
             while (true)
             {
                 // 找一条不是割边的边ei+1
@@ -418,9 +437,14 @@ namespace MetroSystem
                             continue;
                         }
                         // 选定（vi，i）这条边
-                        System.Console.WriteLine(NoToName[vi] + "-" + NoToName[i]);
+                        Console.WriteLine(NoToName[vi] + "-" + NoToName[i]);
                         sum += metrosys.SectionLen(metrosys.StaCollection[NoToName[vi]], metrosys.StaCollection[NoToName[i]]);
                         vi = i;
+                        if(metrosys.StaCollection[NoToName[vi]].isBoundary&&boundprinted[vi]==false)
+                        {
+                            sum += PrintBound(vi);
+                            boundprinted[vi] = true;
+                        }
                         flag = true;
                         break;
                     }
@@ -433,16 +457,23 @@ namespace MetroSystem
                         {
                             Graph[vi, i]--; 
                             Graph[i, vi]--;
-                            System.Console.WriteLine(NoToName[vi] + "-" + NoToName[i]);
+                            Console.WriteLine(NoToName[vi] + "-" + NoToName[i]);
                             sum += metrosys.SectionLen(metrosys.StaCollection[NoToName[vi]], metrosys.StaCollection[NoToName[i]]);
                             vi = i;
+                            if (metrosys.StaCollection[NoToName[vi]].isBoundary && boundprinted[vi] == false)
+                            {
+                                sum += PrintBound(vi);
+                                boundprinted[vi] = true;
+                            }
                             flag = true;
                             break;
                         }
                     }
                     if (flag == false)
                     {
-                        System.Console.WriteLine("总长度为:"+sum);
+                        Console.Write(string_out);
+                        sum += addcount;
+                        Console.WriteLine("总长度为:"+sum);
                         break;
                     }
                         
