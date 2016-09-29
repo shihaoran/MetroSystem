@@ -80,8 +80,11 @@ namespace MetroSystem
         public string LineName;
         public List<Station> Stations=new List<Station>();
         public List<Tuple<string, Station>> TransStations = new List<Tuple<string, Station>>();
-        public bool isRoundLine;
+        public List<int> oneWayFlag = new List<int>();
+        public bool isOneWay = false;
+        public bool isRoundLine = false;
         private int LineTransSta=0;
+        
 
         public Line(string name)
         {
@@ -93,9 +96,10 @@ namespace MetroSystem
             return Stations.Count;
         }
 
-        public void addSta(Station s)
+        public void addSta(Station s,int flag)
         {
             Stations.Add(s);
+            oneWayFlag.Add(flag);
             if(s.isTrans)
             {
                 foreach (string lName in s.TransLine)
@@ -115,7 +119,7 @@ namespace MetroSystem
     }
     public class PathSection
     {
-        private LinkedList<Station> list = new LinkedList<Station>();
+        public LinkedList<Station> list = new LinkedList<Station>();
         public string LineName;
         public bool isTrans=true;
         public Station from;
@@ -149,6 +153,18 @@ namespace MetroSystem
         {
             return list.Count();
         }
+        public void copy(PathSection p)
+        {
+            list.Clear();
+            foreach(Station s in p.list)
+            {
+                list.AddLast(s);
+            }
+            LineName = p.LineName;
+            isTrans = p.isTrans;
+            from = p.from;
+            to = p.to;
+        }
     }
     class Program
     {
@@ -171,6 +187,7 @@ namespace MetroSystem
         {
             FileStream fs = new FileStream("beijing-subway.txt", FileMode.Open);
             StreamReader sr = new StreamReader(fs, Encoding.Default);
+            int oneWayFlag = 0;
             //StreamReader sr = File.OpenText("beijing-subway.txt");
             string readIn = sr.ReadLine();
             while (readIn != null)
@@ -178,30 +195,43 @@ namespace MetroSystem
                 if (readIn.Equals("BEGIN"))
                 {
                     string isRound = sr.ReadLine();
+                    string isOneWay = sr.ReadLine();
                     string name = sr.ReadLine();
                     Line MetroLine = new Line(name);
                     if (isRound.Equals("环线"))
                     {
                         MetroLine.isRoundLine = true;
                     }
-                    if(!LineCollection.ContainsKey(name))
+                    if(isOneWay.Equals("单向"))
+                    {
+                        MetroLine.isOneWay = true;
+                    }
+                    if (!LineCollection.ContainsKey(name))
                         LineCollection.Add(name, MetroLine);
                     readIn = sr.ReadLine();
                     while (readIn != "END" && readIn != null)
                     {
+                        if (readIn.Equals("0") || readIn.Equals("1") ||
+                            readIn.Equals("2") || readIn.Equals("3"))
+                        {
+                            oneWayFlag = Convert.ToInt32(readIn);
+                            readIn = sr.ReadLine();
+                            continue;
+                        }
+
                         string[] infos = readIn.Split(' ');
                         if (!StaCollection.ContainsKey(infos[0]))
-                            StaCollection.Add(infos[0], new Station(infos,MetroLine));
+                            StaCollection.Add(infos[0], new Station(infos, MetroLine));
                         else
                         {
                             StaCollection[infos[0]].addLine(MetroLine);
-                            if(infos.Length>1)
+                            if (infos.Length > 1)
                             {
                                 if (infos[1].Equals("IsBound"))
                                     StaCollection[infos[0]].addEndSta(infos);
-                            } 
+                            }
                         }
-                        if(StaCollection[infos[0]].isTrans&&(!TransStaCollection.ContainsKey(infos[0])))
+                        if (StaCollection[infos[0]].isTrans && (!TransStaCollection.ContainsKey(infos[0])))
                         {
                             TransStaCollection.Add(infos[0], StaCollection[infos[0]]);
                             TransStaCount++;
@@ -210,9 +240,10 @@ namespace MetroSystem
                             StaCollection[infos[0]].setTransStaNo(TransStaCount);
                         }
                         readIn = sr.ReadLine();
-                        MetroLine.addSta(StaCollection[infos[0]]);
+                        MetroLine.addSta(StaCollection[infos[0]], oneWayFlag);
+
                     }
-                    
+
                 }
                 else
                     readIn = sr.ReadLine();
@@ -266,6 +297,46 @@ namespace MetroSystem
                 graph1[NameToNo[new1], NameToNo[old2]] = SectionLen(StaCollection[old2], StaCollection[new1]);
             }
         }
+
+        public Tuple<int, List<string>> FindNearestTransSta(Station s)
+        {
+            List<string> staList = new List<string>();
+            int count = 0;
+            if (s.isTrans)
+            {
+                staList.Add(s.StationName);
+                return Tuple.Create(1, staList);
+            }
+
+            Line l = s.PlaceOfLine.First().Key;
+            int place = s.PlaceOfLine.First().Value;
+
+            for(int i = place-1; i >= 0; i--)
+            {
+                if (l.oneWayFlag.ElementAt(i) == 2)
+                    break;
+                if(l.Stations.ElementAt(i).isTrans)
+                {
+                    staList.Add(l.Stations.ElementAt(i).StationName);
+                    count++;
+                    break;
+                }
+            }
+
+            for(int i = place-1; i < l.Stations.Count; i++)
+            {
+                if (l.oneWayFlag.ElementAt(i) == 1)
+                    break;
+                if (l.Stations.ElementAt(i).isTrans)
+                {
+                    staList.Add(l.Stations.ElementAt(i).StationName);
+                    count++;
+                    break;
+                }
+            }
+
+            return Tuple.Create(count, staList);
+        }
         public Tuple<string,int> DjistraPath(string f,string t)
         {
             if (!StaCollection.ContainsKey(f))
@@ -279,27 +350,7 @@ namespace MetroSystem
             Station from = StaCollection[f];
             Station to = StaCollection[t];
             string extrastring="";
-            if (from.StationName.Equals("2号航站楼"))
-            {
-                if(to.StationName.Equals("3号航站楼"))
-                {
-                    string temp = "\n三元桥\n3号航站楼";
-                    return Tuple.Create(temp, 2);
-                }
-                else
-                    from = StaCollection["3号航站楼"];
-            }
-            else if (from.StationName.Equals("3号航站楼"))
-            {
-                if (to.StationName.Equals("2号航站楼"))
-                {
-                    string temp = "\n2号航站楼";
-                    return Tuple.Create(temp, 1);
-                }
-                else
-                    extrastring = "\n2号航站楼";
-                extralen= 1;
-            }
+            
             LinkedList<PathSection> path = new LinkedList<PathSection>();
             if (isSameLine(from, to) != null)
             {
@@ -317,41 +368,47 @@ namespace MetroSystem
             int ToNo1 = -1;
             int FromNo2 = -1;
             int ToNo2 = -1;
-            int BigNum = 99999;
+
+            Tuple<int, List<string>> FromTuple = FindNearestTransSta(from);
+            Tuple<int, List<string>> ToTuple = FindNearestTransSta(to);
+
+            if(FromTuple.Item1==1)
+            {
+                FromNo1 = NameToNo[FromTuple.Item2.First()];
+            }
+            else
+            {
+                FromNo1 = NameToNo[FromTuple.Item2.First()];
+                FromNo2 = NameToNo[FromTuple.Item2.Last()];
+            }
+            if (ToTuple.Item1 == 1)
+            {
+                ToNo1 = NameToNo[ToTuple.Item2.First()];
+            }
+            else
+            {
+                ToNo1 = NameToNo[ToTuple.Item2.First()];
+                ToNo2 = NameToNo[ToTuple.Item2.Last()];
+            }
+            int BigNum = int.MaxValue;
             int len1=BigNum, len2=BigNum, len3=BigNum, len4=BigNum;
             
-            if (from.isTrans)
+            if (NoToName[FromNo1]==f)
             {
-                FromNo1 = NameToNo[from.StationName];
-                if(to.isTrans)
+                if(NoToName[ToNo1]==t)
                 {
-                    ToNo1 = NameToNo[to.StationName];
                     len = DjistraLen(FromNo1, ToNo1, parents1);
                     path = BuildPath(parents1, FromNo1, ToNo1);
                     return Tuple.Create(extrastring + HandlePath(path), len + extralen);
                 }
                 else
                 {
-                    Line temp = to.PlaceOfLine.First().Key;
-                    for (int i= to.PlaceOfLine.First().Value-1;i>0;i--)
+                    len1 = DjistraLen(FromNo1, ToNo1, parents1);
+                    len1 += SectionLen(StaCollection[ToTuple.Item2.First()], to);
+                    if(ToTuple.Item1==2)
                     {
-                        if (temp.Stations.ElementAt(i - 1).isTrans)
-                        {
-                            ToNo1 = NameToNo[temp.Stations.ElementAt(i - 1).StationName];
-                            len1 = DjistraLen(FromNo1, ToNo1, parents1);
-                            len1 += SectionLen(temp.Stations.ElementAt(i - 1), to);
-                            break;
-                        } 
-                    }
-                    for (int i = to.PlaceOfLine.First().Value+1; i <=to.PlaceOfLine.First().Key.Stations.Count; i++)
-                    {
-                        if (temp.Stations.ElementAt(i - 1).isTrans)
-                        {
-                            ToNo2 = NameToNo[temp.Stations.ElementAt(i - 1).StationName];
-                            len2 = DjistraLen(FromNo1, ToNo2, parents2);
-                            len2 += SectionLen(temp.Stations.ElementAt(i - 1), to);
-                            break;
-                        }
+                        len2 = DjistraLen(FromNo1, ToNo2, parents2);
+                        len2 += SectionLen(StaCollection[ToTuple.Item2.Last()], to);
                     }
                     if(len1<len2)
                     {
@@ -371,34 +428,11 @@ namespace MetroSystem
             }
             else
             {
-                Line temp = from.PlaceOfLine.First().Key;
-                for (int i = from.PlaceOfLine.First().Value - 1; i > 0; i--)
+                if (NoToName[ToNo1]==t)
                 {
-                    if (temp.Stations.ElementAt(i - 1).isTrans)
-                    {
-                        FromNo1 = NameToNo[temp.Stations.ElementAt(i - 1).StationName];
-                        break;
-                    }
-                        
-                }
-                for (int i = from.PlaceOfLine.First().Value + 1; i <= from.PlaceOfLine.First().Key.Stations.Count; i++)
-                {
-                    if (temp.Stations.ElementAt(i - 1).isTrans)
-                    {
-                        FromNo2 = NameToNo[temp.Stations.ElementAt(i - 1).StationName];
-                        break;
-                    }
-                }
-
-                if (to.isTrans)
-                {
-                    ToNo1 = NameToNo[to.StationName];
-                    if(FromNo1!=-1)
-                    {
-                        len1 = DjistraLen(FromNo1, ToNo1, parents1);
-                        len1 += SectionLen(from, StaCollection[NoToName[FromNo1]]);
-                    }
-                    if(FromNo2!=-1)
+                    len1 = DjistraLen(FromNo1, ToNo1, parents1);
+                    len1 += SectionLen(from, StaCollection[NoToName[FromNo1]]);
+                    if(FromTuple.Item1==2)
                     {
                         len2 = DjistraLen(FromNo2, ToNo1, parents2);
                         len2 += SectionLen(from, StaCollection[NoToName[FromNo2]]);
@@ -420,23 +454,6 @@ namespace MetroSystem
                 }
                 else
                 {
-                    temp = to.PlaceOfLine.First().Key;
-                    for (int i = to.PlaceOfLine.First().Value - 1; i > 0; i--)
-                    {
-                        if (temp.Stations.ElementAt(i - 1).isTrans)
-                        {
-                            ToNo1 = NameToNo[temp.Stations.ElementAt(i - 1).StationName];
-                            break;
-                        }
-                    }
-                    for (int i = to.PlaceOfLine.First().Value + 1; i <= to.PlaceOfLine.First().Key.Stations.Count; i++)
-                    {
-                        if (temp.Stations.ElementAt(i - 1).isTrans)
-                        {
-                            ToNo2 = NameToNo[temp.Stations.ElementAt(i - 1).StationName];
-                            break;
-                        }
-                    }
                     if(FromNo1!=-1&&ToNo1!=-1)
                     {
                         len1 = DjistraLen(FromNo1, ToNo1, parents1);
@@ -714,7 +731,176 @@ namespace MetroSystem
             return path;
         
         }
-        public PathSection MakePathSection(Station from,Station to)
+        public PathSection MakePathSection(Station from, Station to)
+        {
+            Line l = isSameLine(from, to);
+            PathSection p = new PathSection(l.LineName);
+            int start = from.PlaceOfLine[l];
+            int end = to.PlaceOfLine[l];
+            if(l.isOneWay)
+            {
+                PathSection p1 = new PathSection(l.LineName);
+                PathSection p2 = new PathSection(l.LineName);
+                int i, j, flag = 0, flag1 = 0, flag2 = 0, flag3 = 0;//0-没找到 1-找到了 2-继续找 flag1往后前 flag2往后后
+                //往后
+                for(i = start - 1; i < l.Stations.Count; i++)
+                {
+                    if(i != start - 1)
+                        p1.addSta(l.Stations.ElementAt(i));
+                    if (l.Stations.ElementAt(i).StationName.Equals(to.StationName))
+                    {
+                        flag3 = 1;
+                        break;
+                    }
+                    if (l.oneWayFlag.ElementAt(i) == 1)
+                    {
+                        flag3 = 0;
+                        break;
+                    }
+                    else if (l.oneWayFlag.ElementAt(i) == 3)
+                    {
+                        flag3 = 2;
+                        break;
+                    }
+                }
+                if(flag3 == 2)
+                {
+                    for (j = 0; j < i && !l.Stations.ElementAt(j).StationName.Equals(l.Stations.ElementAt(i).StationName); j++);
+                    if(j != i)//回到了前面的站点
+                    {
+                        p2.copy(p1);
+                        if(j == 0 || l.oneWayFlag.ElementAt(j) == 2)
+                        {
+                            flag1 = 0;
+                        }
+                        else
+                        {
+                            for (i = j - 1; i >= 0; i--)
+                            {
+                                p1.addSta(l.Stations.ElementAt(i));
+                                if (l.Stations.ElementAt(i).StationName.Equals(to.StationName))
+                                {
+                                    flag1 = 1;
+                                    break;
+                                }
+                                if (l.oneWayFlag.ElementAt(i) == 2)
+                                {
+                                    flag1 = 0;
+                                    break;
+                                }
+                            }
+                        }
+
+                        //往后后找
+                        if (l.oneWayFlag.ElementAt(j) == 1)
+                        {
+                            flag2 = 0;
+                        }
+                        else
+                        {
+                            for (i = j + 1; i < start; i++)
+                            {
+                                p2.addSta(l.Stations.ElementAt(i));
+                                if (l.Stations.ElementAt(i).StationName.Equals(to.StationName))
+                                {
+                                    flag2 = 1;
+                                    break;
+                                }
+                                if (l.oneWayFlag.ElementAt(i) == 1)
+                                {
+                                    flag2 = 0;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                //往前
+                for(i = start - 1; i >= 0; i--)
+                {
+                    if(i != start - 1)
+                        p.addSta(l.Stations.ElementAt(i));
+                    if (l.Stations.ElementAt(i).StationName.Equals(to.StationName))
+                    {
+                        flag = 1;
+                        break;
+                    }
+                    if (l.oneWayFlag.ElementAt(i) == 2)
+                    {
+                        flag = 0;
+                        break;
+                    }
+                }
+
+                int len, len1, len2, len3;
+                if (flag != 1)
+                    len = int.MaxValue;
+                else
+                    len = p.GetLen();
+                if (flag1 != 1)
+                    len1 = int.MaxValue;
+                else
+                    len1 = p1.GetLen();
+                if(flag3 == 1)
+                {
+                    len3 = p1.GetLen();
+                    if (len3 <= len)
+                        return p1;
+                    else
+                        return p;
+                }
+                if (flag2 != 1)
+                    len2 = int.MaxValue;
+                else
+                    len2 = p2.GetLen();
+
+                if(len <= len1 && len <= len2)
+                {
+                    return p;
+                }
+                else if(len1 <= len && len1 <= len2)
+                {
+                    return p1;
+                }
+                else
+                {
+                    return p2;
+                }
+            }
+            if (l.isRoundLine && (SectionLen1(from, to) < Math.Abs(start - end)))
+            {
+                if (start < end)
+                {
+                    for (int i = start - 2; i >= 0; i--)
+                        p.addSta(l.Stations.ElementAt(i));
+                    for (int i = l.Stations.Count - 1; i >= end - 1; i--)
+                        p.addSta(l.Stations.ElementAt(i));
+                }
+                else
+                {
+                    for (int i = start; i <= l.Stations.Count - 1; i++)
+                        p.addSta(l.Stations.ElementAt(i));
+                    for (int i = 0; i <= end - 1; i++)
+                        p.addSta(l.Stations.ElementAt(i));
+                }
+            }
+            else
+            {
+                if (start < end)
+                {
+                    for (int i = start; i <= end - 1; i++)
+                        p.addSta(l.Stations.ElementAt(i));
+                }
+                else
+                {
+                    for (int i = start - 2; i >= end - 1; i--)
+                        p.addSta(l.Stations.ElementAt(i));
+                }
+            }
+            return p;
+        }
+        public PathSection MakePathSection1(Station from,Station to)
         {
             Line l = isSameLine(from, to);
             PathSection p = new PathSection(l.LineName);
@@ -752,7 +938,12 @@ namespace MetroSystem
             }
             return p;
         }
-        public int SectionLen(Station s1,Station s2)
+        public int SectionLen(Station s1, Station s2)
+        {
+            PathSection p = MakePathSection(s1, s2);
+            return p.GetLen();
+        }
+        public int SectionLen1(Station s1,Station s2)
         {
             Line temp = isSameLine(s1, s2);
             int len=999999;
@@ -858,6 +1049,7 @@ namespace MetroSystem
             Program metrosys = new Program();
             metrosys.ReadData();
             metrosys.BuildGragph("","","");
+            //Console.Write(metrosys.MakePathSection(metrosys.StaCollection["巴沟"], metrosys.StaCollection["三元桥"]));
 
             /*ChinPost cp = new ChinPost(metrosys);
             cp.Initial(graph1, TransStaCount, 1);
@@ -866,9 +1058,9 @@ namespace MetroSystem
             Console.ReadLine();
             Station f = metrosys.StaCollection[args[1]];
             Station t = metrosys.StaCollection[args[2]];
-            
-            string f1="南邵";
-            string f2 = "角门西";
+            */
+            string f1="沙河";
+            string f2 = "郭公庄";
             string f3 = "亦庄火车站";
             string f4 = "木樨地";
             string f5 = "灯市口";
@@ -896,7 +1088,7 @@ namespace MetroSystem
             //System.Console.Write(q.Item2);
             //System.Console.Write(q.Item1);
             Console.ReadLine();
-            */
+            /*
             if (args.Length == 1 && args[0].Equals("exit"))
             {
                 System.Console.WriteLine("程序结束");
@@ -1036,7 +1228,7 @@ namespace MetroSystem
                         break;
                 }
             }
-            
+            */
         }
     }
 }
